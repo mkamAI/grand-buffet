@@ -1,12 +1,3 @@
-// ── Auth + persistence: Supabase when configured, localStorage always ──
-import { createClient, SupabaseClient, User } from "@supabase/supabase-js";
-
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-export const supabase: SupabaseClient | null = url && anon ? createClient(url, anon) : null;
-export const cloudEnabled = !!supabase;
-
 export interface Profile {
   username: string;
   gold: number;
@@ -18,7 +9,7 @@ export interface Profile {
   runs: number;
   extractions: number;
   streakCount: number;
-  streakDay: string; // YYYY-MM-DD of last claim
+  streakDay: string;
 }
 
 export const DEFAULT_PROFILE: Profile = {
@@ -50,54 +41,39 @@ export function saveLocal(p: Profile) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(p)); } catch {}
 }
 
-// ── Cloud ──────────────────────────────────────────────────────────
-export async function signInGuest(): Promise<User | null> {
-  if (!supabase) return null;
-  const { data: s } = await supabase.auth.getSession();
-  if (s.session?.user) return s.session.user;
-  const { data, error } = await supabase.auth.signInAnonymously();
-  if (error) { console.warn("guest sign-in failed:", error.message); return null; }
-  return data.user;
+export async function cloudLoad(): Promise<{ cloud: boolean; profile: Profile | null }> {
+  try {
+    const r = await fetch("/api/load", { cache: "no-store" });
+    if (!r.ok) return { cloud: false, profile: null };
+    const j = await r.json();
+    return { cloud: !!j.cloud, profile: j.profile ? { ...DEFAULT_PROFILE, ...j.profile } : null };
+  } catch {
+    return { cloud: false, profile: null };
+  }
 }
 
-export async function signInEmail(email: string): Promise<string> {
-  if (!supabase) return "Cloud sync not configured.";
-  const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined } });
-  return error ? error.message : "Magic link sent — check your inbox.";
-}
-
-export async function loadCloud(userId: string): Promise<Profile | null> {
-  if (!supabase) return null;
-  const { data } = await supabase.from("profiles").select("data").eq("id", userId).maybeSingle();
-  return data?.data ? { ...DEFAULT_PROFILE, ...data.data } : null;
-}
-
-export async function saveCloud(userId: string, p: Profile) {
-  if (!supabase) return;
-  await supabase.from("profiles").upsert({
-    id: userId,
-    username: p.username,
-    best_haul: p.bestHaul,
-    level: p.level,
-    extractions: p.extractions,
-    data: p,
-    updated_at: new Date().toISOString(),
-  });
+export async function cloudSave(p: Profile) {
+  try {
+    await fetch("/api/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(p),
+    });
+  } catch {}
 }
 
 export interface LeaderRow { username: string; best_haul: number; level: number; extractions: number }
 
 export async function fetchLeaderboard(): Promise<LeaderRow[]> {
-  if (!supabase) return [];
-  const { data } = await supabase
-    .from("profiles")
-    .select("username,best_haul,level,extractions")
-    .order("best_haul", { ascending: false })
-    .limit(10);
-  return (data as LeaderRow[]) ?? [];
+  try {
+    const r = await fetch("/api/leaderboard", { cache: "no-store" });
+    if (!r.ok) return [];
+    return (await r.json()).rows ?? [];
+  } catch {
+    return [];
+  }
 }
 
-// ── Daily streak reward ────────────────────────────────────────────
 export function claimDailyStreak(p: Profile): { p: Profile; reward: number } {
   const today = new Date().toISOString().slice(0, 10);
   if (p.streakDay === today) return { p, reward: 0 };
