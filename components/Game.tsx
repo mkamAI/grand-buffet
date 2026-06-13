@@ -4,7 +4,6 @@ import { Engine, HudState, RunResult, PlayerStats, CarriedItem } from "@/game/en
 import { BIOMES, INGREDIENTS, RECIPES, UPGRADES, ROT_MULT, RARITY_COLOR, xpForLevel } from "@/game/data";
 import {
   Profile, DEFAULT_PROFILE, loadLocal, saveLocal, cloudEnabled,
-  signInGuest, signInEmail, loadCloud, saveCloud, fetchLeaderboard, LeaderRow, claimDailyStreak, supabase,
 } from "@/lib/save";
 
 type Screen = "login" | "hub" | "run" | "results";
@@ -35,8 +34,6 @@ export default function Game() {
 
   // resume cloud session on load
   useEffect(() => {
-    if (!supabase) return;
-    supabase.auth.getSession().then(async ({ data }) => {
       if (data.session?.user) await enterHub(data.session.user.id);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
