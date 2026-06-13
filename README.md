@@ -63,3 +63,4 @@ game/data.ts          Ingredients, recipes, biomes, upgrades — tune balance he
 lib/save.ts           Supabase client, local/cloud persistence, daily streak
 supabase/schema.sql   profiles table + RLS
 ```
+# Sat Jun 13 13:08:16 EDT 2026
